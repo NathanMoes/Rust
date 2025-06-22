@@ -363,3 +363,96 @@ pub async fn get_similar_tracks(graph: &Graph, track_ids: &[String], limit: i32)
 
     Ok(tracks)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pub async fn get_track_by_id(graph: &Graph, track_id: &str) -> Result<Option<Track>> {
+    let query = Query::new(
+        "MATCH (t:Track) WHERE t.id = $track_id
+         MATCH (t)<-[:PERFORMED]-(a:Artist)
+         OPTIONAL MATCH (al:Album)-[:CONTAINS]->(t)
+         RETURN t.id as id, t.name as name,
+                collect(DISTINCT a.id) as artist_ids,
+                collect(DISTINCT a.name) as artist_names,
+                COALESCE(al.id, '') as album_id,
+                COALESCE(al.name, '') as album_name,
+                t.duration_ms as duration_ms, t.popularity as popularity,
+                t.explicit as explicit, t.danceability as danceability,
+                t.energy as energy, t.key as key, t.loudness as loudness,
+                t.mode as mode, t.speechiness as speechiness,
+                t.acousticness as acousticness, t.instrumentalness as instrumentalness,
+                t.liveness as liveness, t.valence as valence,
+                t.tempo as tempo, t.time_signature as time_signature,
+                t.preview_url as preview_url".to_string()
+    )
+    .param("track_id", track_id);
+
+    let mut result = graph.execute(query).await?;
+    
+    if let Some(row) = result.next().await? {
+        Ok(Some(Track {
+            id: row.get::<String>("id")?,
+            name: row.get::<String>("name")?,
+            artist_ids: row.get::<Vec<String>>("artist_ids")?,
+            artist_names: row.get::<Vec<String>>("artist_names")?,
+            album_id: row.get::<String>("album_id").unwrap_or_default(),
+            album_name: row.get::<String>("album_name").unwrap_or_default(),
+            duration_ms: row.get::<i64>("duration_ms").unwrap_or(0) as i32,
+            popularity: row.get::<i64>("popularity").unwrap_or(0) as i32,
+            explicit: row.get::<bool>("explicit").unwrap_or(false),
+            danceability: row.get::<f64>("danceability").unwrap_or(0.0),
+            energy: row.get::<f64>("energy").unwrap_or(0.0),
+            key: row.get::<i64>("key").unwrap_or(0) as i32,
+            loudness: row.get::<f64>("loudness").unwrap_or(0.0),
+            mode: row.get::<i64>("mode").unwrap_or(0) as i32,
+            speechiness: row.get::<f64>("speechiness").unwrap_or(0.0),
+            acousticness: row.get::<f64>("acousticness").unwrap_or(0.0),
+            instrumentalness: row.get::<f64>("instrumentalness").unwrap_or(0.0),
+            liveness: row.get::<f64>("liveness").unwrap_or(0.0),
+            valence: row.get::<f64>("valence").unwrap_or(0.0),
+            tempo: row.get::<f64>("tempo").unwrap_or(0.0),
+            time_signature: row.get::<i64>("time_signature").unwrap_or(4) as i32,
+            preview_url: row.get::<Option<String>>("preview_url")?,
+        }))
+    } else {
+        Ok(None)
+    }
+}

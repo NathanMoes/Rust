@@ -46,6 +46,26 @@ pub struct YouTubeVideo {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BackendYouTubeVideo {
+    pub id: String,
+    pub title: String,
+    pub channel_title: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrackWithYouTube {
+    pub track: Track,
+    pub youtube_video: Option<BackendYouTubeVideo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SimilarTracksResponse {
+    pub original_track: Track,
+    pub similar_tracks: Vec<TrackWithYouTube>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreatedPlaylist {
     pub playlist_id: String,
     pub title: String,
