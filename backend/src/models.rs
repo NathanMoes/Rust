@@ -84,3 +84,15 @@ pub struct CreatedPlaylist {
     pub tracks_added: i32,
     pub tracks_not_found: Vec<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrackWithYouTube {
+    pub track: Track,
+    pub youtube_video: Option<YouTubeVideo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimilarTracksResponse {
+    pub original_track: Track,
+    pub similar_tracks: Vec<TrackWithYouTube>,
+}

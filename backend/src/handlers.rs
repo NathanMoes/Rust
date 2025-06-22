@@ -321,3 +321,57 @@ pub async fn create_youtube_playlist_from_recommendations(
 
     Ok(Json(playlist))
 }
+
+pub async fn get_similar_tracks_with_youtube(
+    State(neo4j_client): State<Neo4jClient>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<SimilarTracksResponse>, StatusCode> {
+    let track_id = params
+        .get("track_id")
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    let limit = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
+    // Get the original track
+    let original_track = neo4j_db::get_track_by_id(&neo4j_client, track_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Get similar tracks
+    let similar_tracks = neo4j_db::get_similar_tracks(&neo4j_client, &[track_id.clone()], limit)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Get YouTube API key from environment
+    let youtube_api_key = std::env::var("YOUTUBE_API_KEY").ok();
+    let youtube_client = YouTubeClient::new();
+
+    let mut tracks_with_youtube = Vec::new();
+
+    // Search for each similar track on YouTube
+    for track in similar_tracks {
+        let youtube_video = if let Some(ref api_key) = youtube_api_key {
+            let search_query = YouTubeClient::format_search_query(&track.name, &track.artist_names);
+            youtube_client.search_video(&search_query, api_key)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+
+        tracks_with_youtube.push(TrackWithYouTube {
+            track,
+            youtube_video,
+        });
+    }
+
+    Ok(Json(SimilarTracksResponse {
+        original_track,
+        similar_tracks: tracks_with_youtube,
+    }))
+}

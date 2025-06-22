@@ -171,4 +171,29 @@ impl ApiService {
             Err(format!("Playlist creation failed: {}", error_text))
         }
     }
+
+    pub async fn get_similar_tracks_with_youtube(track_id: String, limit: Option<u32>) -> Result<SimilarTracksResponse, String> {
+        let mut url = format!("{}/similar-tracks?track_id={}", API_BASE_URL, track_id);
+        if let Some(limit) = limit {
+            url.push_str(&format!("&limit={}", limit));
+        }
+
+        let response = Request::get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if response.ok() {
+            response
+                .json::<SimilarTracksResponse>()
+                .await
+                .map_err(|e| format!("Failed to parse response: {}", e))
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            Err(format!("Failed to fetch similar tracks: {}", error_text))
+        }
+    }
 }
