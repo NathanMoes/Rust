@@ -2,6 +2,7 @@ use yew::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use crate::services::api::ApiService;
 use crate::types::Track;
+use crate::components::common::{/*Alert,*/ Loading, Card, Button};
 
 #[function_component(Recommendations)]
 pub fn recommendations() -> Html {
@@ -96,9 +97,9 @@ pub fn recommendations() -> Html {
         <div class="max-w-6xl mx-auto space-y-6">
             <h1 class="text-3xl font-bold text-gray-900">{"Music Recommendations"}</h1>
 
-            {if let Some(error) = (*error_message).clone() {
-                <Alert message={error} error={true} />
-            }}
+            //{if let Some(error) = (*error_message).clone() {
+            //    <Alert message={error} error={true} />
+            //}}
 
             <Card title="Find Similar Tracks">
                 <div class="space-y-4">
@@ -106,28 +107,34 @@ pub fn recommendations() -> Html {
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             {"Select a track to get recommendations for:"}
                         </label>
-                        {if *is_loading_tracks {
-                            <div class="text-gray-500">{"Loading tracks..."}</div>
-                        } else if tracks.is_empty() {
-                            <div class="text-gray-500">
-                                {"No tracks available. Import a Spotify playlist first."}
-                            </div>
-                        } else {
-                            <select
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                value={(*selected_track_id).clone()}
-                                onchange={on_track_select}
-                                >
-                                    <option value="">{"-- Select a track --"}</option>
-                                    {for tracks.iter().map(|track| {
-                                        html! {
-                                            <option value={track.id.clone()}>
-                                                {format!("{} - {}", track.name, track.artist_names.join(", "))}
-                                            </option>
-                                        }
-                                    })}
-                                </select>
-                        }}}
+                        {
+                            if *is_loading_tracks {
+                                html! { <div class="text-gray-500">{"Loading tracks..."}</div> }
+                            } else if tracks.is_empty() {
+                                html! {
+                                    <div class="text-gray-500">
+                                        {"No tracks available. Import a Spotify playlist first."}
+                                    </div>
+                                }
+                            } else {
+                                html! {
+                                    <select
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        value={(*selected_track_id).clone()}
+                                        onchange={on_track_select}
+                                        >
+                                            <option value="">{"-- Select a track --"}</option>
+                                            {for tracks.iter().map(|track| {
+                                                html! {
+                                                    <option value={track.id.clone()}>
+                                                        {format!("{} - {}", track.name, track.artist_names.join(", "))}
+                                                    </option>
+                                                }
+                                            })}
+                                    </select>
+                                }
+                            }
+                        }
                     </div>
 
                     <div class="flex items-center space-x-4">
@@ -219,9 +226,7 @@ pub fn recommendations() -> Html {
                 html! {}
             }}
 
-            {if *is_loading_recommendations {
-                <Loading message={Some("Finding similar tracks...".to_string())} />
-            } else if !recommendations.is_empty() {
+            {if !recommendations.is_empty() {
                 html! {
                     <Card title={format!("Recommended Tracks ({})", recommendations.len())}>
                         <div class={"space-y-3"}>

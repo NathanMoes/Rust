@@ -2,6 +2,7 @@ use yew::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use crate::services::api::ApiService;
 use crate::types::{Track, CreatedPlaylist};
+use crate::components::common::{/*Alert,*/ Loading, Card, Button};
 
 #[function_component(Playlists)]
 pub fn playlists() -> Html {
@@ -50,7 +51,7 @@ pub fn playlists() -> Html {
         let is_loading_playlist = is_loading_playlist.clone();
         let error_message = error_message.clone();
         
-        Callback::from(move |_| {
+        Callback::from(move |_: MouseEvent| {
             let title = (*playlist_title).clone();
             let description = (*playlist_description).clone();
             let queries = (*track_queries).clone();
@@ -104,7 +105,7 @@ pub fn playlists() -> Html {
         let is_loading_playlist = is_loading_playlist.clone();
         let error_message = error_message.clone();
         
-        Callback::from(move |_| {
+        Callback::from(move |_: MouseEvent| {
             let title = (*playlist_title).clone();
             let description = (*playlist_description).clone();
             let track_id = (*selected_track_id).clone();
@@ -150,11 +151,11 @@ pub fn playlists() -> Html {
 
     html! {
         <div class="max-w-4xl mx-auto space-y-6">
-            <h1 class="text-3xl font-bold text-gray-900">{"Create YouTube Playlists"</h1>
+            <h1 class="text-3xl font-bold text-gray-900">{"Create YouTube Playlists"}</h1>
 
-            if let Some(error) = (*error_message).clone() {
-                <Alert message={error} error={true} />
-            }
+            // if let Some(error) = (*error_message).clone() {
+            //     <Alert message={error} error={true} />
+            // }
 
             // Tab Navigation
             <div class="border-b border-gray-200">
@@ -172,7 +173,7 @@ pub fn playlists() -> Html {
                             Callback::from(move |_| on_tab_change.emit("manual".to_string()))
                         }
                     >
-                        {"Manual Track List"
+                        {"Manual Track List"}
                     </button>
                     
                     <button
@@ -188,7 +189,7 @@ pub fn playlists() -> Html {
                             Callback::from(move |_| on_tab_change.emit("recommendations".to_string()))
                         }
                     >
-                        {"From Recommendations"
+                        {"From Recommendations"}
                     </button>
                 </nav>
             </div>
@@ -198,7 +199,7 @@ pub fn playlists() -> Html {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            {"Playlist Title *"
+                            {"Playlist Title *"}
                         </label>
                         <input
                             type="text"
@@ -217,7 +218,7 @@ pub fn playlists() -> Html {
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            {"Description"
+                            {"Description"}
                         </label>
                         <textarea
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -236,159 +237,167 @@ pub fn playlists() -> Html {
                 </div>
             </Card>
 
-            {if *active_tab == "manual" {
-                html! {
-                    <Card title="Manual Track Queries">
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    {"Track Queries (one per line) *"
-                                </label>
-                                <textarea
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    rows="10"
-                                    placeholder={concat!(
-                                        "Enter track queries, one per line:\n",
-                                        "The Beatles - Hey Jude\n",
-                                        "Queen - Bohemian Rhapsody\n",
-                                        "Led Zeppelin - Stairway to Heaven"
-                                    )}
-                                    value={(*track_queries).clone()}
-                                    oninput={
-                                        let track_queries = track_queries.clone();
-                                        Callback::from(move |e: InputEvent| {
-                                            let textarea: web_sys::HtmlTextAreaElement = e.target_unchecked_into();
-                                            track_queries.set(textarea.value());
-                                        })
-                                    }
-                                />
-                                <p class="text-sm text-gray-600 mt-1">
-                                    {"Format: Artist - Song Title (one per line)"
-                                </p>
-                            </div>
-                            
-                            <Button
-                                onclick={create_manual_playlist}
-                                disabled={Some(*is_loading_playlist)}
-                                variant="primary"
-                            >
-                                if *is_loading_playlist {
-                                    {"Creating Playlist..."
-                                } else {
-                                    {"Create YouTube Playlist"
-                                }
-                            </Button>
-                        </div>
-                    </Card>
-                }
-            } else {
-                html! {
-                    <Card title="Create from Recommendations">
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    {"Select a track to base recommendations on: *"
-                                </label>
-                                {if *is_loading_tracks {
-                                    <div class="text-gray-500">{"Loading tracks..."</div>
-                                } else if tracks.is_empty() {
-                                    <div class="text-gray-500">
-                                        {"No tracks available. Import a Spotify playlist first."
-                                    </div>
-                                } else {
-                                    html! {
-                                        <select
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                            value={(*selected_track_id).clone()}
-                                            onchange={
-                                                let selected_track_id = selected_track_id.clone();
-                                                Callback::from(move |e: Event| {
-                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
-                                                    selected_track_id.set(select.value());
-                                                })
-                                            }
-                                        >
-                                            <option value="">{"-- Select a track --"</option>
-                                            {for tracks.iter().map(|track| {
-                                                html! {
-                                                    <option value={track.id.clone()}>
-                                                        {format!("{} - {}", track.name, track.artist_names.join(", "))}
-                                                    </option>
-                                                }
-                                            })}
-                                        </select>
-                                    }
-                                }}
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    {"Number of recommended tracks:"
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="50"
-                                    value={recommendation_limit.to_string()}
-                                    oninput={
-                                        let recommendation_limit = recommendation_limit.clone();
-                                        Callback::from(move |e: InputEvent| {
-                                            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                            if let Ok(value) = input.value().parse::<u32>() {
-                                                recommendation_limit.set(value.max(1).min(50));
-                                            }
-                                        })
-                                    }
-                                    class="w-24 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                            </div>
-                            
-                            <Button
-                                onclick={create_recommendation_playlist}
-                                disabled={Some(*is_loading_playlist || selected_track_id.is_empty())}
-                                variant="primary"
-                            >
-                                if *is_loading_playlist {
-                                    {"Creating Playlist from Recommendations..."
-                                } else {
-                                    {"Create Playlist from Recommendations"
-                                }
-                            </Button>
-                        </div>
-                    </Card>
-                }
-            }}
+            //{if *active_tab == "manual" {
+//                html! {
+//                    <Card title="Manual Track Queries">
+//                        <div class="space-y-4">
+//                            <div>
+//                                <label class="block text-sm font-medium text-gray-700 mb-2">
+//                                    {"Track Queries (one per line) *"}
+//                                </label>
+//                                <textarea
+//                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+//                                    rows="10"
+//                                    placeholder={concat!(
+//                                        "Enter track queries, one per line:\n",
+//                                        "The Beatles - Hey Jude\n",
+//                                        "Queen - Bohemian Rhapsody\n",
+//                                        "Led Zeppelin - Stairway to Heaven"
+//                                    )}
+//                                    value={(*track_queries).clone()}
+//                                    oninput={
+//                                        let track_queries = track_queries.clone();
+//                                        Callback::from(move |e: InputEvent| {
+//                                            let textarea: web_sys::HtmlTextAreaElement = e.target_unchecked_into();
+//                                            track_queries.set(textarea.value());
+//                                        })
+//                                    }
+//                                />
+//                                <p class="text-sm text-gray-600 mt-1">
+//                                    {"Format: Artist - Song Title (one per line)"}
+//                                </p>
+//                            </div>
+//                            
+//                            <Button
+//                                onclick={create_manual_playlist}
+//                                disabled={Some(*is_loading_playlist)}
+//                                variant="primary"
+//                            >
+//                                if *is_loading_playlist {
+//                                    {"Creating Playlist..."}
+//                                } else {
+//                                    {"Create YouTube Playlist"}
+//                                }
+//                            </Button>
+//                        </div>
+//                    </Card>
+//                }
+//            } else {
+//                html! {
+//                    <Card title="Create from Recommendations">
+//                        <div class="space-y-4">
+//                            <div>
+//                                <label class="block text-sm font-medium text-gray-700 mb-2">
+//                                    {"Select a track to base recommendations on: *"}
+//                                </label>
+//                                {if *is_loading_tracks {
+//                                    <div class="text-gray-500">{"Loading tracks..."</div>
+//                                } else if tracks.is_empty() {
+//                                    <div class="text-gray-500">
+//                                        {"No tracks available. Import a Spotify playlist first."}
+//                                    </div>
+//                                } else {
+//                                    html! {
+//                                        <select
+//                                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+//                                            value={(*selected_track_id).clone()}
+//                                            onchange={
+//                                                let selected_track_id = selected_track_id.clone();
+//                                                Callback::from(move |e: Event| {
+//                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+//                                                    selected_track_id.set(select.value());
+//                                                })
+//                                            }
+//                                        >
+//                                            <option value="">{"-- Select a track --"}</option>
+//                                            {for tracks.iter().map(|track| {
+//                                                html! {
+//                                                    <option value={track.id.clone()}>
+//                                                        {format!("{} - {}", track.name, track.artist_names.join(", "))}
+//                                                    </option>
+//                                                }
+//                                            })}
+//                                        </select>
+//                                    }
+//                                }}
+//                            </div>
+//                            
+//                            <div>
+//                                <label class="block text-sm font-medium text-gray-700 mb-2">
+//                                    {"Number of recommended tracks:"}
+//                                </label>
+//                                <input
+//                                    type="number"
+//                                    min="1"
+//                                    max="50"
+//                                    value={recommendation_limit.to_string()}
+//                                    oninput={
+//                                        let recommendation_limit = recommendation_limit.clone();
+//                                        Callback::from(move |e: InputEvent| {
+//                                            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+//                                            if let Ok(value) = input.value().parse::<u32>() {
+//                                                recommendation_limit.set(value.max(1).min(50));
+//                                            }
+//                                        })
+//                                    }
+//                                    class="w-24 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+//                                />
+//                            </div>
+//                            
+//                            <Button
+//                                onclick={create_recommendation_playlist}
+//                                disabled={Some(*is_loading_playlist || selected_track_id.is_empty())}
+//                                variant="primary"
+//                            >
+//                                if *is_loading_playlist {
+//                                    {"Creating Playlist from Recommendations..."}
+//                                } else {
+//                                    {"Create Playlist from Recommendations"}
+//                                }
+//                            </Button>
+//                        </div>
+//                    </Card>
+//                //}
+//            //}}
 
-            {if *is_loading_playlist {
-                <div class="flex items-center justify-center py-8">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                    <span class="ml-3 text-gray-600">{"Creating your YouTube playlist..."</span>
-                </div>
-            }}
+            //{if *is_loading_playlist {
+            //    html! {
+            //        <div class="flex items-center justify-center py-8">
+            //            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            //            <span class="ml-3 text-gray-600">{"Creating your YouTube playlist..."}</span>
+            //        </div>
+            //    }
+            //} else {
+            //    html! {}
+            //}}
 
             {if let Some(playlist) = (*created_playlist).clone() {
-                <Card title="Playlist Created Successfully! 🎉">
-                        <div class="space-y-4">
-                            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                                <h4 class="font-semibold text-green-800 text-lg">{&playlist.title}</h4>
-                                <p class="text-green-700 mt-1">{"Playlist ID: "{&playlist.playlist_id}</p>
+                html! {
+                    <Card title="Playlist Created Successfully! 🎉">
+                            <div class="space-y-4">
+                                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                                    <h4 class="font-semibold text-green-800 text-lg">{&playlist.title}</h4>
+                                    <p class="text-green-700 mt-1">{format!("Playlist ID: {}", &playlist.playlist_id)}</p>
 
-                                <div class="mt-4">
-                                    <a
-                                        href={playlist.url.clone()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                                    >
-                                        {"🎵 Open in YouTube"
-                                        <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                                        </svg>
-                                    </a>
+                                    <div class="mt-4">
+                                        <a
+                                            href={playlist.url.clone()}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                        >
+                                            {"🎵 Open in YouTube"}
+                                            <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke_linecap="round" stroke_linejoin="round" stroke_width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </Card>
+                        </Card>
+                }
+            } else {
+                html! {}
             }}
         </div>
     }
