@@ -10,7 +10,27 @@ pub async fn init_neo4j() -> Result<Neo4jClient> {
     let user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string());
     let password = std::env::var("NEO4J_PASSWORD").expect("NEO4J_PASSWORD must be set");
 
-    let graph = Graph::new(uri, user, password).await?;
+    tracing::info!("Connecting to Neo4j at {} with user {}", uri, user);
+    
+    let graph = Graph::new(uri.clone(), user.clone(), password).await?;
+    
+    // Test the connection
+    let test_query = Query::new("RETURN 1 as test".to_string());
+    match graph.execute(test_query).await {
+        Ok(mut result) => {
+            if let Some(row) = result.next().await? {
+                let test_value: i64 = row.get("test")?;
+                tracing::info!("Neo4j connection test successful, got value: {}", test_value);
+            } else {
+                tracing::error!("Neo4j connection test failed - no result returned");
+                return Err(anyhow::anyhow!("Neo4j connection test failed"));
+            }
+        }
+        Err(e) => {
+            tracing::error!("Neo4j connection test failed: {}", e);
+            return Err(e.into());
+        }
+    }
     
     // Create indexes for better performance
     create_indexes(&graph).await?;
@@ -29,9 +49,18 @@ async fn create_indexes(graph: &Graph) -> Result<()> {
 
     for query_str in queries {
         let query = Query::new(query_str.to_string());
-        let _ = graph.execute(query).await?;
+        match graph.execute(query).await {
+            Ok(_) => {
+                tracing::debug!("Successfully created/verified index: {}", query_str);
+            }
+            Err(e) => {
+                tracing::error!("Failed to create index {}: {}", query_str, e);
+                return Err(e.into());
+            }
+        }
     }
 
+    tracing::info!("All Neo4j indexes created/verified successfully");
     Ok(())
 }
 
@@ -53,8 +82,22 @@ pub async fn store_artist(graph: &Graph, artist: &Artist) -> Result<()> {
     .param("followers", artist.followers as i64)
     .param("image_url", artist.image_url.clone().unwrap_or_default());
 
-    let _ = graph.execute(query).await?;
-    Ok(())
+    match graph.execute(query).await {
+        Ok(mut result) => {
+            // Check if we got a result back
+            if result.next().await?.is_some() {
+                tracing::debug!("Successfully stored artist: {}", artist.name);
+                Ok(())
+            } else {
+                tracing::error!("No result returned when storing artist: {}", artist.name);
+                Err(anyhow::anyhow!("Failed to store artist - no result returned"))
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error storing artist {}: {}", artist.name, e);
+            Err(e.into())
+        }
+    }
 }
 
 pub async fn store_track(graph: &Graph, track: &Track) -> Result<()> {
@@ -99,18 +142,44 @@ pub async fn store_track(graph: &Graph, track: &Track) -> Result<()> {
     .param("time_signature", track.time_signature as i64)
     .param("preview_url", track.preview_url.clone().unwrap_or_default());
 
-    let _ = graph.execute(query).await?;
+    match graph.execute(query).await {
+        Ok(mut result) => {
+            if result.next().await?.is_some() {
+                tracing::debug!("Successfully stored track: {}", track.name);
+            } else {
+                tracing::error!("No result returned when storing track: {}", track.name);
+                return Err(anyhow::anyhow!("Failed to store track - no result returned"));
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error storing track {}: {}", track.name, e);
+            return Err(e.into());
+        }
+    }
 
     // Create relationships with artists
     for artist_id in &track.artist_ids {
         let rel_query = Query::new(
             "MATCH (t:Track {id: $track_id}), (a:Artist {id: $artist_id})
-             MERGE (a)-[:PERFORMED]->(t)".to_string()
+             MERGE (a)-[:PERFORMED]->(t)
+             RETURN a, t".to_string()
         )
         .param("track_id", track.id.clone())
         .param("artist_id", artist_id.clone());
 
-        let _ = graph.execute(rel_query).await?;
+        match graph.execute(rel_query).await {
+            Ok(mut result) => {
+                if result.next().await?.is_some() {
+                    tracing::debug!("Successfully created relationship between artist {} and track {}", artist_id, track.name);
+                } else {
+                    tracing::warn!("No result when creating relationship between artist {} and track {}", artist_id, track.name);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error creating relationship between artist {} and track {}: {}", artist_id, track.name, e);
+                return Err(e.into());
+            }
+        }
     }
 
     // Create relationship with album if it exists
@@ -120,13 +189,26 @@ pub async fn store_track(graph: &Graph, track: &Track) -> Result<()> {
              SET al.name = $album_name
              WITH al
              MATCH (t:Track {id: $track_id})
-             MERGE (al)-[:CONTAINS]->(t)".to_string()
+             MERGE (al)-[:CONTAINS]->(t)
+             RETURN al, t".to_string()
         )
         .param("album_id", track.album_id.clone())
         .param("album_name", track.album_name.clone())
         .param("track_id", track.id.clone());
 
-        let _ = graph.execute(album_query).await?;
+        match graph.execute(album_query).await {
+            Ok(mut result) => {
+                if result.next().await?.is_some() {
+                    tracing::debug!("Successfully created album relationship for track {}", track.name);
+                } else {
+                    tracing::warn!("No result when creating album relationship for track {}", track.name);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error creating album relationship for track {}: {}", track.name, e);
+                return Err(e.into());
+            }
+        }
     }
 
     Ok(())
@@ -159,8 +241,10 @@ pub async fn get_all_artists(graph: &Graph) -> Result<Vec<Artist>> {
 }
 
 pub async fn get_all_tracks(graph: &Graph) -> Result<Vec<Track>> {
+    tracing::debug!("Executing get_all_tracks query");
     let query = Query::new(
-        "MATCH (t:Track)<-[:PERFORMED]-(a:Artist)
+        "MATCH (t:Track)
+         OPTIONAL MATCH (a:Artist)-[:PERFORMED]->(t)
          OPTIONAL MATCH (al:Album)-[:CONTAINS]->(t)
          RETURN t.id as id, t.name as name, 
                 collect(DISTINCT a.id) as artist_ids,
@@ -180,8 +264,11 @@ pub async fn get_all_tracks(graph: &Graph) -> Result<Vec<Track>> {
 
     let mut result = graph.execute(query).await?;
     let mut tracks = Vec::new();
-
+    
+    tracing::debug!("Processing query results for get_all_tracks");
     while let Some(row) = result.next().await? {
+        let track_name = row.get::<String>("name").unwrap_or_default();
+        tracing::debug!("Found track: {}", track_name);
         tracks.push(Track {
             id: row.get::<String>("id")?,
             name: row.get::<String>("name")?,
