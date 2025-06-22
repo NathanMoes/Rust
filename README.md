@@ -1,14 +1,48 @@
-# Spotify Neo4j Backend
+# Spotify Neo4j Full-Stack Application
 
-A Rust backend service that integrates Spotify music data with Neo4j graph database to create intelligent YouTube playlists based on audio features and relationships.
+A complete full-stack Rust application that integrates Spotify music data with Neo4j graph database to create intelligent YouTube playlists. Features a WebAssembly frontend built with Yew and a high-performance Axum backend.
 
-## Features
+## 🌟 Features
 
 - 🎵 **Spotify Integration**: Import playlist data, tracks, and audio features
-- 🔗 **Neo4j Graph Database**: Store music relationships and audio characteristics
+- 🔗 **Neo4j Graph Database**: Store music relationships and audio characteristics  
 - 🎯 **Smart Recommendations**: Find similar tracks based on audio features
 - 📺 **YouTube Playlist Creation**: Automatically create YouTube playlists
+- 🦀 **Full-Stack Rust**: WebAssembly frontend + Axum backend
+- ⚡ **Modern UI**: Responsive web interface built with Yew and Tailwind CSS
+- 🔄 **Real-time Updates**: Interactive frontend with real-time API communication
 - 🚀 **Fast API**: Built with Axum for high-performance HTTP handling
+
+## Project Structure
+
+```
+spotify-neo4j-app/
+├── backend/                    # Rust Axum API server
+│   ├── src/
+│   │   ├── main.rs
+│   │   ├── handlers.rs
+│   │   ├── models.rs
+│   │   ├── neo4j_db.rs
+│   │   ├── spotify.rs
+│   │   └── youtube.rs
+│   ├── Cargo.toml
+│   └── target/
+├── frontend/                   # Yew WebAssembly frontend
+│   ├── src/
+│   │   ├── main.rs
+│   │   ├── lib.rs
+│   │   ├── types.rs
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── services/
+│   ├── Cargo.toml
+│   ├── index.html
+│   └── dist/
+├── docker-compose.yml          # Neo4j database
+├── dev.sh                     # Development setup script
+├── .env.example               # Environment variables template
+└── README.md
+```
 
 ## Architecture
 
@@ -21,7 +55,49 @@ A Rust backend service that integrates Spotify music data with Neo4j graph datab
                         ┌─────────────────┐
                         │  YouTube API    │
                         └─────────────────┘
+                                │
+                                ▼
+                        ┌─────────────────┐
+                        │ WebAssembly UI  │
+                        │   (Yew + Rust)  │
+                        └─────────────────┘
 ```
+
+## 🚀 Quick Start
+
+### Method 1: One-Command Setup (Recommended)
+```bash
+# Start everything in development mode
+./dev.sh
+
+# Or build for production
+./dev.sh build
+```
+
+### Method 2: Manual Setup
+```bash
+# 1. Install tools
+./dev.sh install
+
+# 2. Start Neo4j database
+docker compose up -d neo4j
+
+# 3. Set up environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 4. Start backend
+cd backend && cargo run
+
+# 5. Start frontend (in another terminal)
+cd frontend && trunk serve
+```
+
+## 🌐 Access Points
+
+- **Frontend**: http://localhost:8080 (Development) or http://localhost:3000 (Production)
+- **Backend API**: http://localhost:3000/api/
+- **Neo4j Browser**: http://localhost:7474 (`neo4j` / `password123`)
 
 ## Prerequisites
 
@@ -52,6 +128,51 @@ YOUTUBE_API_KEY=your_youtube_api_key
 cargo build
 cargo run
 ```
+
+## 📁 Project Structure
+
+```
+spotify-neo4j-backend/
+├── src/                    # Backend source code
+│   ├── main.rs            # Axum server setup
+│   ├── handlers.rs        # HTTP request handlers
+│   ├── models.rs          # Data structures
+│   ├── spotify.rs         # Spotify API client
+│   ├── neo4j_db.rs       # Neo4j operations
+│   └── youtube.rs         # YouTube API client
+├── frontend/              # WebAssembly frontend
+│   ├── src/
+│   │   ├── main.rs       # Yew app entry point
+│   │   ├── components/   # UI components
+│   │   ├── pages/        # Page components
+│   │   ├── services/     # API services
+│   │   └── types.rs      # Type definitions
+│   ├── index.html        # HTML template
+│   ├── Cargo.toml        # Frontend dependencies
+│   └── Trunk.toml        # Build configuration
+├── Cargo.toml             # Backend dependencies
+├── docker-compose.yml     # Neo4j setup
+├── dev.sh                 # Development script
+└── .env.example          # Environment template
+```
+
+## 🎯 Frontend Features
+
+- **🎨 Modern UI**: Built with Yew (Rust WebAssembly framework) and Tailwind CSS
+- **📱 Responsive Design**: Works on desktop and mobile devices
+- **⚡ Fast Performance**: WebAssembly provides near-native performance
+- **🔄 Real-time Updates**: Seamless API integration with the Rust backend
+- **🎵 Music Visualization**: Interactive displays of audio features and recommendations
+- **📊 Data Visualization**: Visual representation of music relationships and graph data
+
+## 🔧 Backend Features
+
+- **⚡ High Performance**: Built with Axum for maximum throughput
+- **🔐 Type Safety**: Full Rust type system benefits
+- **🗄️ GraphQL-style Queries**: Neo4j Cypher integration
+- **🔄 Async/Await**: Non-blocking I/O operations
+- **📡 RESTful API**: Clean HTTP endpoint design
+- **🔗 CORS Support**: Cross-origin resource sharing enabled
 
 ## API Endpoints
 

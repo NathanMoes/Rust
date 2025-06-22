@@ -1,0 +1,12 @@
+{
+  "name": "spotify-neo4j-frontend",
+  "version": "0.1.0",
+  "description": "WebAssembly frontend for Spotify Neo4j Backend",
+  "scripts": {
+    "dev": "trunk serve",
+    "build": "trunk build --release",
+    "clean": "rm -rf dist pkg"
+  },
+  "keywords": ["rust", "webassembly", "yew", "spotify", "neo4j"],
+  "license": "MIT"
+}
