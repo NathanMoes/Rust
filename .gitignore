@@ -1,6 +1,8 @@
 # Rust
 /target
 Cargo.lock
+/backend/target
+/frontend/target
 
 # IDE
 .vscode/
