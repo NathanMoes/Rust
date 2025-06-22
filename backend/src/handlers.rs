@@ -12,6 +12,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use tracing::{info, warn, error, debug, instrument};
 
 // Helper function to extract playlist ID from Spotify URL
 fn extract_playlist_id(url: &str) -> Option<String> {
@@ -34,65 +35,160 @@ pub async fn health_check() -> Json<Value> {
     }))
 }
 
+#[instrument(skip(neo4j_client))]
 pub async fn import_spotify_data(
     State(neo4j_client): State<Neo4jClient>,
     JsonBody(request): JsonBody<SpotifyImportRequest>,
 ) -> Result<Json<Value>, StatusCode> {
+    let start_time = std::time::Instant::now();
+    info!("Starting Spotify playlist import for URL: {}", request.playlist_url);
+    
     let spotify_client = SpotifyClient::new();
     
     // Extract playlist ID from URL
-    let playlist_id = extract_playlist_id(&request.playlist_url)
-        .ok_or(StatusCode::BAD_REQUEST)?;
+    let playlist_id = match extract_playlist_id(&request.playlist_url) {
+        Some(id) => {
+            info!("Successfully extracted playlist ID: {}", id);
+            id
+        }
+        None => {
+            error!("Failed to extract playlist ID from URL: {}", request.playlist_url);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
     
     // For now, we'll need to handle authentication differently
     // This is a placeholder - in a real app, you'd get this from the user
-    let access_token = std::env::var("SPOTIFY_ACCESS_TOKEN")
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let access_token = match std::env::var("SPOTIFY_ACCESS_TOKEN") {
+        Ok(token) => {
+            debug!("Successfully retrieved Spotify access token");
+            token
+        }
+        Err(_) => {
+            error!("SPOTIFY_ACCESS_TOKEN environment variable not found");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
     
     // Get tracks from Spotify playlist
-    let tracks = spotify_client
+    debug!("Fetching playlist tracks from Spotify API");
+    let fetch_start = std::time::Instant::now();
+    let tracks = match spotify_client
         .get_playlist_tracks(&playlist_id, &access_token)
         .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    {
+        Ok(tracks) => {
+            let fetch_duration = fetch_start.elapsed();
+            info!(
+                "Successfully fetched {} tracks from playlist in {:.2}s", 
+                tracks.len(), 
+                fetch_duration.as_secs_f64()
+            );
+            tracks
+        }
+        Err(e) => {
+            let fetch_duration = fetch_start.elapsed();
+            error!(
+                "Failed to fetch playlist tracks after {:.2}s: {}", 
+                fetch_duration.as_secs_f64(),
+                e
+            );
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
 
     let mut imported_tracks = 0;
     let mut imported_artists = 0;
     let mut processed_artists = std::collections::HashSet::new();
 
+    info!("Starting database storage for {} tracks", tracks.len());
+    let storage_start = std::time::Instant::now();
+
     // Store tracks and artists in Neo4j
-    for track in &tracks {
-        // Store track
-        neo4j_db::store_track(&neo4j_client, track)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (track_index, track) in tracks.iter().enumerate() {
+        debug!("Processing track {}/{}: {}", track_index + 1, tracks.len(), track.name);
         
-        imported_tracks += 1;
+        // Store track
+        let track_store_start = std::time::Instant::now();
+        match neo4j_db::store_track(&neo4j_client, track).await {
+            Ok(_) => {
+                imported_tracks += 1;
+                debug!(
+                    "Stored track '{}' in {:.3}s", 
+                    track.name, 
+                    track_store_start.elapsed().as_secs_f64()
+                );
+            }
+            Err(e) => {
+                error!("Failed to store track '{}': {}", track.name, e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
 
         // Store artists (avoid duplicates)
         for artist_id in &track.artist_ids {
             if !processed_artists.contains(artist_id) {
+                debug!("Fetching artist details for ID: {}", artist_id);
+                let artist_fetch_start = std::time::Instant::now();
+                
                 match spotify_client.get_artist(artist_id, &access_token).await {
                     Ok(artist) => {
-                        neo4j_db::store_artist(&neo4j_client, &artist)
-                            .await
-                            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                        let fetch_duration = artist_fetch_start.elapsed();
+                        debug!(
+                            "Fetched artist '{}' in {:.3}s", 
+                            artist.name, 
+                            fetch_duration.as_secs_f64()
+                        );
                         
-                        imported_artists += 1;
-                        processed_artists.insert(artist_id.clone());
+                        let artist_store_start = std::time::Instant::now();
+                        match neo4j_db::store_artist(&neo4j_client, &artist).await {
+                            Ok(_) => {
+                                imported_artists += 1;
+                                processed_artists.insert(artist_id.clone());
+                                debug!(
+                                    "Stored artist '{}' in {:.3}s", 
+                                    artist.name, 
+                                    artist_store_start.elapsed().as_secs_f64()
+                                );
+                            }
+                            Err(e) => {
+                                error!("Failed to store artist '{}': {}", artist.name, e);
+                                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                            }
+                        }
                     }
                     Err(e) => {
-                        println!("Warning: Failed to fetch artist {}: {}", artist_id, e);
+                        let fetch_duration = artist_fetch_start.elapsed();
+                        warn!(
+                            "Failed to fetch artist {} after {:.3}s: {}", 
+                            artist_id, 
+                            fetch_duration.as_secs_f64(),
+                            e
+                        );
                     }
                 }
             }
         }
     }
 
+    let storage_duration = storage_start.elapsed();
+    let total_duration = start_time.elapsed();
+    
+    info!(
+        "Spotify import completed successfully in {:.2}s (storage: {:.2}s). Imported {} tracks and {} artists from playlist {}",
+        total_duration.as_secs_f64(),
+        storage_duration.as_secs_f64(),
+        imported_tracks,
+        imported_artists,
+        playlist_id
+    );
+
     Ok(Json(json!({
         "message": "Spotify data imported successfully",
         "imported_tracks": imported_tracks,
         "imported_artists": imported_artists,
-        "playlist_id": playlist_id
+        "playlist_id": playlist_id,
+        "duration_seconds": total_duration.as_secs_f64()
     })))
 }
 
