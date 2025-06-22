@@ -57,16 +57,24 @@ pub async fn import_spotify_data(
         }
     };
     
-    // For now, we'll need to handle authentication differently
-    // This is a placeholder - in a real app, you'd get this from the user
+    // Try to get access token from environment variable first, then generate one if not found
     let access_token = match std::env::var("SPOTIFY_ACCESS_TOKEN") {
         Ok(token) => {
-            debug!("Successfully retrieved Spotify access token");
+            debug!("Using Spotify access token from environment variable");
             token
         }
         Err(_) => {
-            error!("SPOTIFY_ACCESS_TOKEN environment variable not found");
-            return Err(StatusCode::UNAUTHORIZED);
+            debug!("SPOTIFY_ACCESS_TOKEN not found in environment, generating new token");
+            match spotify_client.get_access_token().await {
+                Ok(token) => {
+                    debug!("Successfully generated new Spotify access token");
+                    token
+                }
+                Err(e) => {
+                    error!("Failed to generate Spotify access token: {}", e);
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
+            }
         }
     };
     

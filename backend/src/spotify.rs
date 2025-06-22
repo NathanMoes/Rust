@@ -3,6 +3,14 @@ use reqwest::Client;
 use serde_json::Value;
 use anyhow::{Result, anyhow};
 use tracing::{info, warn, error, debug, instrument};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    token_type: String,
+    expires_in: u64,
+}
 
 pub struct SpotifyClient {
     client: Client,
@@ -13,6 +21,41 @@ impl SpotifyClient {
         Self {
             client: Client::new(),
         }
+    }
+
+    /// Get access token using Client Credentials flow
+    #[instrument(skip(self))]
+    pub async fn get_access_token(&self) -> Result<String> {
+        let client_id = std::env::var("SPOTIFY_CLIENT_ID")
+            .map_err(|_| anyhow!("SPOTIFY_CLIENT_ID environment variable not found"))?;
+        let client_secret = std::env::var("SPOTIFY_CLIENT_SECRET")
+            .map_err(|_| anyhow!("SPOTIFY_CLIENT_SECRET environment variable not found"))?;
+
+        debug!("Requesting new Spotify access token");
+
+        let params = [
+            ("grant_type", "client_credentials"),
+            ("client_id", &client_id),
+            ("client_secret", &client_secret),
+        ];
+
+        let response = self.client
+            .post("https://accounts.spotify.com/api/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .form(&params)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            error!("Failed to get Spotify access token: {}", error_text);
+            return Err(anyhow!("Failed to get Spotify access token: {}", error_text));
+        }
+
+        let token_response: TokenResponse = response.json().await?;
+        info!("Successfully obtained Spotify access token (expires in {} seconds)", token_response.expires_in);
+        
+        Ok(token_response.access_token)
     }
 
     #[instrument(skip(self, access_token), fields(playlist_id = %playlist_id))]
