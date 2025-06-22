@@ -13,6 +13,19 @@ use axum::{
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+// Helper function to extract playlist ID from Spotify URL
+fn extract_playlist_id(url: &str) -> Option<String> {
+    // Handle URLs like: https://open.spotify.com/playlist/441K4rF3u0qfg9m4X1WSQJ
+    if let Some(captures) = url.split('/').last() {
+        // Remove any query parameters
+        let playlist_id = captures.split('?').next()?;
+        if !playlist_id.is_empty() {
+            return Some(playlist_id.to_string());
+        }
+    }
+    None
+}
+
 pub async fn health_check() -> Json<Value> {
     Json(json!({
         "status": "healthy",
@@ -27,9 +40,18 @@ pub async fn import_spotify_data(
 ) -> Result<Json<Value>, StatusCode> {
     let spotify_client = SpotifyClient::new();
     
+    // Extract playlist ID from URL
+    let playlist_id = extract_playlist_id(&request.playlist_url)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    
+    // For now, we'll need to handle authentication differently
+    // This is a placeholder - in a real app, you'd get this from the user
+    let access_token = std::env::var("SPOTIFY_ACCESS_TOKEN")
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    
     // Get tracks from Spotify playlist
     let tracks = spotify_client
-        .get_playlist_tracks(&request.playlist_id, &request.access_token)
+        .get_playlist_tracks(&playlist_id, &access_token)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
@@ -49,7 +71,7 @@ pub async fn import_spotify_data(
         // Store artists (avoid duplicates)
         for artist_id in &track.artist_ids {
             if !processed_artists.contains(artist_id) {
-                match spotify_client.get_artist(artist_id, &request.access_token).await {
+                match spotify_client.get_artist(artist_id, &access_token).await {
                     Ok(artist) => {
                         neo4j_db::store_artist(&neo4j_client, &artist)
                             .await
@@ -70,7 +92,7 @@ pub async fn import_spotify_data(
         "message": "Spotify data imported successfully",
         "imported_tracks": imported_tracks,
         "imported_artists": imported_artists,
-        "playlist_id": request.playlist_id
+        "playlist_id": playlist_id
     })))
 }
 

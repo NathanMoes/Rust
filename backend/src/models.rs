@@ -48,8 +48,7 @@ pub struct Album {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpotifyImportRequest {
-    pub playlist_id: String,
-    pub access_token: String,
+    pub playlist_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
