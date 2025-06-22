@@ -10,9 +10,19 @@ use axum::{
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use std::net::SocketAddr;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "spotify_neo4j_backend=info,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     dotenv::dotenv().ok();
     
     // Initialize Neo4j connection
@@ -34,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("🚀 Server running on http://{}", addr);
+    tracing::info!("🚀 Server starting on http://{}", addr);
     
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
