@@ -1,13 +1,13 @@
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
-pub struct Props {
+pub struct AlertProps {
     pub message: String,
     pub error: bool,
 }
 
 #[function_component(Alert)]
-pub fn alert(props: &Props) -> Html {
+pub fn alert(props: &AlertProps) -> Html {
     let base_classes = "p-4 rounded-lg border";
     let variant_classes = if props.error {
         "bg-red-50 border-red-200 text-red-800"
