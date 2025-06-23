@@ -1,16 +1,20 @@
 use crate::models::{YouTubeVideo, CreatedPlaylist};
+use crate::rate_limiter::{RateLimiter, RateLimitConfig};
 use reqwest::Client;
 use serde_json::{Value, json};
 use anyhow::{Result, anyhow};
+use std::sync::Arc;
 
 pub struct YouTubeClient {
     client: Client,
+    rate_limiter: Arc<RateLimiter>,
 }
 
 impl YouTubeClient {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig::youtube_config())),
         }
     }
 
@@ -20,8 +24,11 @@ impl YouTubeClient {
             urlencoding::encode(query),
             api_key
         );
+        let client = &self.client;
 
-        let response = self.client.get(&url).send().await?;
+        let response = self.rate_limiter.execute(|| async {
+            client.get(&url).send().await.map_err(|e| anyhow!("Request failed: {}", e))
+        }).await?;
         
         if !response.status().is_success() {
             return Err(anyhow!("YouTube search failed: {}", response.status()));
@@ -90,13 +97,19 @@ impl YouTubeClient {
             }
         });
 
-        let response = self.client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", access_token))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await?;
+        let client = &self.client;
+        let auth_header = format!("Bearer {}", access_token);
+
+        let response = self.rate_limiter.execute(|| async {
+            client
+                .post(url)
+                .header("Authorization", &auth_header)
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|e| anyhow!("Request failed: {}", e))
+        }).await?;
 
         if !response.status().is_success() {
             return Err(anyhow!("Failed to add video to playlist: {}", response.status()));
@@ -116,36 +129,41 @@ impl YouTubeClient {
         // Create the playlist
         let playlist_id = self.create_playlist(name, description, access_token).await?;
         
-        let mut tracks_added = 0;
+        let mut tracks_added: i32 = 0;
         let mut tracks_not_found = Vec::new();
 
-        // Search for each track and add to playlist
-        for track_name in track_names {
-            match self.search_video(track_name, youtube_api_key).await {
-                Ok(Some(video)) => {
-                    match self.add_video_to_playlist(&playlist_id, &video.id, access_token).await {
-                        Ok(_) => {
-                            tracks_added += 1;
-                            println!("Added: {} - {}", track_name, video.title);
-                        }
-                        Err(e) => {
-                            println!("Failed to add {} to playlist: {}", track_name, e);
-                            tracks_not_found.push(track_name.clone());
+        // Process tracks in smaller batches to avoid overwhelming the API
+        let batch_size = 10;
+        for batch in track_names.chunks(batch_size) {
+            for track_name in batch {
+                match self.search_video(track_name, youtube_api_key).await {
+                    Ok(Some(video)) => {
+                        match self.add_video_to_playlist(&playlist_id, &video.id, access_token).await {
+                            Ok(_) => {
+                                tracks_added += 1;
+                                println!("Added: {} - {}", track_name, video.title);
+                            }
+                            Err(e) => {
+                                println!("Failed to add {} to playlist: {}", track_name, e);
+                                tracks_not_found.push(track_name.clone());
+                            }
                         }
                     }
-                }
-                Ok(None) => {
-                    println!("No video found for: {}", track_name);
-                    tracks_not_found.push(track_name.clone());
-                }
-                Err(e) => {
-                    println!("Search failed for {}: {}", track_name, e);
-                    tracks_not_found.push(track_name.clone());
+                    Ok(None) => {
+                        println!("No video found for: {}", track_name);
+                        tracks_not_found.push(track_name.clone());
+                    }
+                    Err(e) => {
+                        println!("Search failed for {}: {}", track_name, e);
+                        tracks_not_found.push(track_name.clone());
+                    }
                 }
             }
 
-            // Add a small delay to avoid rate limiting
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            // Rate limiting is now handled by the RateLimiter, but add a small pause between batches
+            if batch.len() == batch_size && tracks_added < track_names.len() as i32 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            }
         }
 
         Ok(CreatedPlaylist {
