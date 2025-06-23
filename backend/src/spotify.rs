@@ -1,9 +1,11 @@
 use crate::models::{Artist, Track};
+use crate::rate_limiter::{RateLimiter, RateLimitConfig};
 use reqwest::Client;
 use serde_json::Value;
 use anyhow::{Result, anyhow};
 use tracing::{info, warn, error, debug, instrument};
 use serde::Deserialize;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -14,12 +16,14 @@ struct TokenResponse {
 
 pub struct SpotifyClient {
     client: Client,
+    rate_limiter: Arc<RateLimiter>,
 }
 
 impl SpotifyClient {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig::spotify_config())),
         }
     }
 
@@ -75,32 +79,24 @@ impl SpotifyClient {
 
             debug!("Fetching playlist page {} (offset: {}, limit: {})", page_count, offset, limit);
             let request_start = std::time::Instant::now();
+            let client = &self.client;
+            let auth_header = format!("Bearer {}", access_token);
 
-            let response = match self.client
-                .get(&url)
-                .header("Authorization", format!("Bearer {}", access_token))
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    let request_duration = request_start.elapsed();
-                    debug!(
-                        "Spotify API request completed in {:.3}s with status: {}", 
-                        request_duration.as_secs_f64(), 
-                        response.status()
-                    );
-                    response
-                }
-                Err(e) => {
-                    let request_duration = request_start.elapsed();
-                    error!(
-                        "Spotify API request failed after {:.3}s: {}", 
-                        request_duration.as_secs_f64(), 
-                        e
-                    );
-                    return Err(anyhow!("Network error: {}", e));
-                }
-            };
+            let response = self.rate_limiter.execute(|| async {
+                client
+                    .get(&url)
+                    .header("Authorization", &auth_header)
+                    .send()
+                    .await
+                    .map_err(|e| anyhow!("Network error: {}", e))
+            }).await?;
+
+            let request_duration = request_start.elapsed();
+            debug!(
+                "Spotify API request completed in {:.3}s with status: {}", 
+                request_duration.as_secs_f64(), 
+                response.status()
+            );
 
             if !response.status().is_success() {
                 let status = response.status();
@@ -210,52 +206,49 @@ impl SpotifyClient {
 
     async fn get_audio_features(&self, track_id: &str, access_token: &str) -> Result<Value> {
         let url = format!("https://api.spotify.com/v1/audio-features/{}", track_id);
+        let client = &self.client;
+        let auth_header = format!("Bearer {}", access_token);
         
-        let response = self.client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", access_token))
-            .send()
-            .await?;
+        self.rate_limiter.execute(|| async {
+            let response = client
+                .get(&url)
+                .header("Authorization", &auth_header)
+                .send()
+                .await
+                .map_err(|e| anyhow!("Request failed: {}", e))?;
 
-        if response.status().is_success() {
-            Ok(response.json().await?)
-        } else {
-            // Return empty object if audio features not available
-            Ok(serde_json::json!({}))
-        }
+            if response.status().is_success() {
+                response.json().await.map_err(|e| anyhow!("JSON parse failed: {}", e))
+            } else {
+                // Return empty object if audio features not available
+                Ok(serde_json::json!({}))
+            }
+        }).await
     }
 
     #[instrument(skip(self, access_token), fields(artist_id = %artist_id))]
     pub async fn get_artist(&self, artist_id: &str, access_token: &str) -> Result<Artist> {
         debug!("Fetching artist details");
         let url = format!("https://api.spotify.com/v1/artists/{}", artist_id);
+        let client = &self.client;
+        let auth_header = format!("Bearer {}", access_token);
         
         let request_start = std::time::Instant::now();
-        let response = match self.client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", access_token))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                let request_duration = request_start.elapsed();
-                debug!(
-                    "Artist API request completed in {:.3}s with status: {}", 
-                    request_duration.as_secs_f64(), 
-                    response.status()
-                );
-                response
-            }
-            Err(e) => {
-                let request_duration = request_start.elapsed();
-                error!(
-                    "Artist API request failed after {:.3}s: {}", 
-                    request_duration.as_secs_f64(), 
-                    e
-                );
-                return Err(anyhow!("Network error: {}", e));
-            }
-        };
+        let response = self.rate_limiter.execute(|| async {
+            client
+                .get(&url)
+                .header("Authorization", &auth_header)
+                .send()
+                .await
+                .map_err(|e| anyhow!("Network error: {}", e))
+        }).await?;
+
+        let request_duration = request_start.elapsed();
+        debug!(
+            "Artist API request completed in {:.3}s with status: {}", 
+            request_duration.as_secs_f64(), 
+            response.status()
+        );
 
         if !response.status().is_success() {
             let status = response.status();

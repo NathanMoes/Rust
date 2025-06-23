@@ -3,6 +3,7 @@ mod neo4j_db;
 mod youtube;
 mod models;
 mod handlers;
+mod rate_limiter;
 
 use axum::{
     routing::{get, post},
