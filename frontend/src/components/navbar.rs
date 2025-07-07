@@ -42,6 +42,13 @@ pub fn navbar() -> Html {
                         </Link<Route>>
                         
                         <Link<Route> 
+                            to={Route::Graph} 
+                            classes="text-gray-700 hover:text-purple-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                        >
+                            {"Graph"}
+                        </Link<Route>>
+                        
+                        <Link<Route> 
                             to={Route::Playlists} 
                             classes="text-gray-700 hover:text-purple-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                         >

@@ -96,3 +96,54 @@ pub struct SimilarTracksResponse {
     pub original_track: Track,
     pub similar_tracks: Vec<TrackWithYouTube>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GraphNode {
+    pub id: String,
+    pub label: String,
+    pub node_type: String, // "track", "artist", "album"
+    pub properties: GraphNodeProperties,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GraphNodeProperties {
+    pub name: String,
+    pub popularity: Option<i32>,
+    pub genres: Option<Vec<String>>,
+    pub audio_features: Option<AudioFeatures>,
+    pub image_url: Option<String>,
+    pub duration_ms: Option<i32>,
+    pub artist_names: Option<Vec<String>>,
+    pub album_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioFeatures {
+    pub danceability: f64,
+    pub energy: f64,
+    pub valence: f64,
+    pub tempo: f64,
+    pub acousticness: f64,
+    pub instrumentalness: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GraphEdge {
+    pub source: String,
+    pub target: String,
+    pub relationship: String, // "PERFORMED", "CONTAINS"
+    pub properties: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GraphData {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GraphSearchRequest {
+    pub query: Option<String>,
+    pub limit: Option<i32>,
+    pub node_types: Option<Vec<String>>,
+}

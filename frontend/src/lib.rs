@@ -7,7 +7,7 @@ mod services;
 mod types;
 
 use components::navbar::Navbar;
-use pages::{Home, Artists, Tracks, Playlists, Recommendations};
+use pages::{Home, Artists, Tracks, Playlists, Recommendations, Graph};
 
 #[derive(Clone, Routable, PartialEq)]
 pub enum Route {
@@ -21,6 +21,8 @@ pub enum Route {
     Playlists,
     #[at("/recommendations")]
     Recommendations,
+    #[at("/graph")]
+    Graph,
 }
 
 fn switch(routes: Route) -> Html {
@@ -30,6 +32,7 @@ fn switch(routes: Route) -> Html {
         Route::Tracks => html! { <Tracks /> },
         Route::Playlists => html! { <Playlists /> },
         Route::Recommendations => html! { <Recommendations /> },
+        Route::Graph => html! { <Graph /> },
     }
 }
 

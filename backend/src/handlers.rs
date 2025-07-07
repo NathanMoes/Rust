@@ -375,3 +375,36 @@ pub async fn get_similar_tracks_with_youtube(
         similar_tracks: tracks_with_youtube,
     }))
 }
+
+#[instrument(skip(neo4j_client))]
+pub async fn get_graph_data(
+    State(neo4j_client): State<Neo4jClient>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<GraphData>, StatusCode> {
+    let start_time = std::time::Instant::now();
+    
+    let query = params.get("query").map(|s| s.as_str());
+    let limit = params.get("limit")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(50);
+    
+    info!("Getting graph data with query: {:?}, limit: {}", query, limit);
+    
+    match neo4j_db::get_graph_data(&neo4j_client, query, Some(limit)).await {
+        Ok(graph_data) => {
+            let duration = start_time.elapsed();
+            info!(
+                "Retrieved graph data successfully: {} nodes, {} edges (took {:?})",
+                graph_data.nodes.len(),
+                graph_data.edges.len(),
+                duration
+            );
+            Ok(Json(graph_data))
+        }
+        Err(e) => {
+            let duration = start_time.elapsed();
+            error!("Failed to get graph data: {} (took {:?})", e, duration);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
