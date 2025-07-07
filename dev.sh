@@ -72,10 +72,25 @@ dev_mode() {
     start_services
     
     # Create .env if it doesn't exist
+    # Create .env if it doesn't exist
     if [ ! -f .env ]; then
         cp .env.example .env
         echo "📄 Created .env file from template"
         echo "⚠️  Please edit .env file with your API credentials"
+        echo "💡 Tip: Use './setup_apis.sh' for guided API configuration"
+    fi
+    
+    # Check API configuration
+    echo "🔍 Checking API Configuration..."
+    source .env
+    if [ -n "$SPOTIFY_CLIENT_ID" ] && [ "$SPOTIFY_CLIENT_ID" != "your_spotify_client_id_here" ]; then
+        echo "✅ Spotify API: Configured"
+        # Try to refresh Spotify token before starting
+        echo "🔄 Refreshing Spotify access token..."
+        ./get_spotify_token.sh || echo "⚠️  Token refresh failed, continuing..."
+    else
+        echo "⚠️  Spotify API: Not configured - some features may not work"
+        echo "   Run './setup_apis.sh' to configure APIs"
     fi
     
     echo ""
