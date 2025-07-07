@@ -59,7 +59,55 @@ impl SpotifyClient {
         let token_response: TokenResponse = response.json().await?;
         info!("Successfully obtained Spotify access token (expires in {} seconds)", token_response.expires_in);
         
+        // Try to save token to .env file for persistence
+        if let Err(e) = self.save_token_to_env(&token_response.access_token).await {
+            warn!("Failed to save token to .env file: {}", e);
+        }
+        
         Ok(token_response.access_token)
+    }
+
+    /// Save access token to .env file for persistence across runs
+    #[instrument(skip(self, token))]
+    async fn save_token_to_env(&self, token: &str) -> Result<()> {
+        use std::fs;
+        use std::path::Path;
+        
+        let env_path = Path::new("../.env");
+        
+        if !env_path.exists() {
+            debug!(".env file not found, skipping token save");
+            return Ok(());
+        }
+        
+        // Read current .env content
+        let content = fs::read_to_string(env_path)
+            .map_err(|e| anyhow!("Failed to read .env file: {}", e))?;
+        
+        // Update or add SPOTIFY_ACCESS_TOKEN
+        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        let mut token_updated = false;
+        
+        for line in &mut lines {
+            if line.starts_with("SPOTIFY_ACCESS_TOKEN=") {
+                *line = format!("SPOTIFY_ACCESS_TOKEN={}", token);
+                token_updated = true;
+                break;
+            }
+        }
+        
+        // Add token if not found
+        if !token_updated {
+            lines.push(format!("SPOTIFY_ACCESS_TOKEN={}", token));
+        }
+        
+        // Write back to file
+        let updated_content = lines.join("\n") + "\n";
+        fs::write(env_path, updated_content)
+            .map_err(|e| anyhow!("Failed to write .env file: {}", e))?;
+        
+        debug!("Successfully saved token to .env file");
+        Ok(())
     }
 
     #[instrument(skip(self, access_token), fields(playlist_id = %playlist_id))]

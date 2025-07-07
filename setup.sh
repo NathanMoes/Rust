@@ -39,6 +39,28 @@ if [ ! -f .env ]; then
     echo "   - YOUTUBE_API_KEY: Get from Google Cloud Console"
     echo "   - Add Spotify credentials if you plan to use Spotify integration"
     echo ""
+    echo "💡 Tip: Use './setup_apis.sh' for guided API configuration"
+    echo ""
+fi
+
+# Check if APIs are configured
+echo "🔍 Checking API Configuration..."
+source .env
+if [ -n "$SPOTIFY_CLIENT_ID" ] && [ "$SPOTIFY_CLIENT_ID" != "your_spotify_client_id_here" ]; then
+    echo "✅ Spotify API: Configured"
+    # Try to get/refresh Spotify token
+    echo "🔄 Refreshing Spotify access token..."
+    ./get_spotify_token.sh
+else
+    echo "⚠️  Spotify API: Not configured"
+    echo "   Run './setup_apis.sh' to configure Spotify API"
+fi
+
+if [ -n "$YOUTUBE_API_KEY" ] && [ "$YOUTUBE_API_KEY" != "your_youtube_api_key_here" ]; then
+    echo "✅ YouTube API: Configured"
+else
+    echo "⚠️  YouTube API: Not configured"
+    echo "   Run './setup_apis.sh' to configure YouTube API"
 fi
 
 echo "🚀 Starting Rust backend server..."
