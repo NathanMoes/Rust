@@ -46,4 +46,7 @@ features = [
   "Headers",
   "AbortController",
   "AbortSignal",
+  "HtmlCanvasElement",
+  "CanvasRenderingContext2d",
+  "DomRect",
 ]
