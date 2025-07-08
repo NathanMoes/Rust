@@ -40,17 +40,22 @@ cleanup_docker() {
         docker rm spotify-neo4j 2>/dev/null || true
     fi
     
-    # Clean up unused Docker resources
-    echo "Cleaning up unused Docker resources..."
+    # Clean up unused Docker resources (but preserve volumes by default)
+    echo "Cleaning up unused Docker resources (preserving data volumes)..."
     docker system prune -f
     
     # Remove volumes if requested
-    read -p "🗑️  Remove Neo4j data volumes? This will delete all stored data! (y/N): " -n 1 -r
+    echo ""
+    echo "💾 Your Neo4j data is preserved in Docker volumes."
+    read -p "🗑️  Do you want to PERMANENTLY DELETE all Neo4j data? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Removing Neo4j volumes..."
-        docker volume rm spotify-neo4j_neo4j_data spotify-neo4j_neo4j_logs spotify-neo4j_neo4j_import spotify-neo4j_neo4j_plugins 2>/dev/null || true
+        echo "⚠️  Removing Neo4j data volumes..."
+        docker volume rm rust_neo4j_data rust_neo4j_logs rust_neo4j_import rust_neo4j_plugins 2>/dev/null || true
         docker compose -f docker-compose.yml down -v
+        echo "🗑️  All Neo4j data has been deleted!"
+    else
+        echo "✅ Neo4j data volumes preserved."
     fi
     
     echo "✅ Docker cleanup complete!"
@@ -89,8 +94,8 @@ start_services() {
         echo "💡 Checking Docker system status..."
         docker system df
         echo ""
-        echo "🔧 Attempting to clean up and retry..."
-        docker system prune -f --volumes
+        echo "🔧 Attempting to clean up and retry (preserving data volumes)..."
+        docker system prune -f  # Removed --volumes flag to preserve data
         docker compose -f docker-compose.yml up -d neo4j
     fi
     
@@ -136,6 +141,48 @@ start_services() {
     echo "   3. Restart Docker service"
     echo "   4. Check Neo4j configuration in docker-compose.yml"
     exit 1
+}
+
+check_data() {
+    echo "💾 Neo4j Data Status"
+    echo "==================="
+    
+    # Check for volumes
+    echo "📊 Docker Volumes:"
+    if docker volume ls | grep -q "rust_neo4j"; then
+        docker volume ls | grep "rust_neo4j" | while read driver name; do
+            size=$(docker system df -v | grep "$name" | awk '{print $3}' || echo "Unknown")
+            echo "   ✅ $name (Size: $size)"
+        done
+    else
+        echo "   ❌ No Neo4j data volumes found"
+    fi
+    
+    # Check container status
+    echo ""
+    echo "🐳 Container Status:"
+    if docker ps -a | grep -q spotify-neo4j; then
+        status=$(docker inspect --format='{{.State.Status}}' spotify-neo4j 2>/dev/null)
+        echo "   ✅ spotify-neo4j container exists (Status: $status)"
+        
+        if [ "$status" = "running" ]; then
+            echo ""
+            echo "🔍 Database Info:"
+            if docker exec spotify-neo4j cypher-shell -u neo4j -p password123 "MATCH (n) RETURN count(n) as total_nodes;" 2>/dev/null; then
+                echo "   ✅ Database is accessible"
+            else
+                echo "   ⚠️  Database not responding"
+            fi
+        fi
+    else
+        echo "   ❌ No spotify-neo4j container found"
+    fi
+    
+    echo ""
+    echo "💡 Commands:"
+    echo "   ./dev.sh dev     - Start development (preserves data)"
+    echo "   ./dev.sh cleanup - Clean containers (ask about data)"
+    echo "   ./health_check.sh - Full system health check"
 }
 
 dev_mode() {
@@ -221,14 +268,18 @@ case $MODE in
     "cleanup"|"clean")
         cleanup_docker
         ;;
+    "data"|"status")
+        check_data
+        ;;
     *)
-        echo "Usage: $0 [dev|build|install|cleanup]"
+        echo "Usage: $0 [dev|build|install|cleanup|data]"
         echo ""
         echo "Commands:"
         echo "  dev     - Start development servers (default)"
         echo "  build   - Build for production"
         echo "  install - Install required tools"
         echo "  cleanup - Clean up Docker containers and resources"
+        echo "  data    - Check Neo4j data status"
         echo ""
         echo "Examples:"
         echo "  $0           # Start development mode"
@@ -236,5 +287,6 @@ case $MODE in
         echo "  $0 build     # Build for production"
         echo "  $0 install   # Install tools only"
         echo "  $0 cleanup   # Clean up Docker resources"
+        echo "  $0 data      # Check what data exists"
         ;;
 esac
