@@ -5,12 +5,18 @@ echo "=============================================="
 
 MODE="${1:-dev}"
 
+# Add Cargo bin to PATH if not already there
+export PATH="$HOME/.cargo/bin:$PATH"
+
 # Configure Rust toolchain and install Trunk
 rustup default stable || true # ignore failure if already configured
 cargo install trunk
 
 install_tools() {
     echo "🔧 Installing required tools..."
+    
+    # Add Cargo bin to PATH if not already there
+    export PATH="$HOME/.cargo/bin:$PATH"
     
     # Install Trunk for WebAssembly frontend builds
     if ! command -v trunk &> /dev/null; then

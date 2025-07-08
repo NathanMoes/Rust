@@ -251,13 +251,21 @@ pub async fn get_all_tracks(graph: &Graph) -> Result<Vec<Track>> {
                 collect(DISTINCT a.name) as artist_names,
                 COALESCE(al.id, '') as album_id,
                 COALESCE(al.name, '') as album_name,
-                t.duration_ms as duration_ms, t.popularity as popularity,
-                t.explicit as explicit, t.danceability as danceability,
-                t.energy as energy, t.key as key, t.loudness as loudness,
-                t.mode as mode, t.speechiness as speechiness,
-                t.acousticness as acousticness, t.instrumentalness as instrumentalness,
-                t.liveness as liveness, t.valence as valence,
-                t.tempo as tempo, t.time_signature as time_signature,
+                COALESCE(t.duration_ms, 0) as duration_ms, 
+                COALESCE(t.popularity, 0) as popularity,
+                COALESCE(t.explicit, false) as explicit, 
+                COALESCE(t.danceability, 0.0) as danceability,
+                COALESCE(t.energy, 0.0) as energy, 
+                COALESCE(t.key, 0) as key, 
+                COALESCE(t.loudness, 0.0) as loudness,
+                COALESCE(t.mode, 0) as mode, 
+                COALESCE(t.speechiness, 0.0) as speechiness,
+                COALESCE(t.acousticness, 0.0) as acousticness, 
+                COALESCE(t.instrumentalness, 0.0) as instrumentalness,
+                COALESCE(t.liveness, 0.0) as liveness, 
+                COALESCE(t.valence, 0.0) as valence,
+                COALESCE(t.tempo, 0.0) as tempo, 
+                COALESCE(t.time_signature, 4) as time_signature,
                 t.preview_url as preview_url
          ORDER BY t.popularity DESC".to_string()
     );
@@ -269,11 +277,25 @@ pub async fn get_all_tracks(graph: &Graph) -> Result<Vec<Track>> {
     while let Some(row) = result.next().await? {
         let track_name = row.get::<String>("name").unwrap_or_default();
         tracing::debug!("Found track: {}", track_name);
+        
+        // Handle artist arrays more safely - filter out null/empty values
+        let artist_ids: Vec<String> = row.get::<Vec<String>>("artist_ids")
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| !id.is_empty())
+            .collect();
+            
+        let artist_names: Vec<String> = row.get::<Vec<String>>("artist_names")
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|name| !name.is_empty())
+            .collect();
+        
         tracks.push(Track {
             id: row.get::<String>("id")?,
             name: row.get::<String>("name")?,
-            artist_ids: row.get::<Vec<String>>("artist_ids").unwrap_or_default(),
-            artist_names: row.get::<Vec<String>>("artist_names").unwrap_or_default(),
+            artist_ids,
+            artist_names,
             album_id: row.get::<String>("album_id").unwrap_or_default(),
             album_name: row.get::<String>("album_name").unwrap_or_default(),
             duration_ms: row.get::<i64>("duration_ms").unwrap_or(0) as i32,
@@ -291,10 +313,11 @@ pub async fn get_all_tracks(graph: &Graph) -> Result<Vec<Track>> {
             valence: row.get::<f64>("valence").unwrap_or(0.0),
             tempo: row.get::<f64>("tempo").unwrap_or(0.0),
             time_signature: row.get::<i64>("time_signature").unwrap_or(4) as i32,
-            preview_url: row.get::<Option<String>>("preview_url")?,
+            preview_url: row.get::<Option<String>>("preview_url").unwrap_or(None),
         });
     }
 
+    tracing::debug!("Retrieved {} tracks from database", tracks.len());
     Ok(tracks)
 }
 
