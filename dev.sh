@@ -5,6 +5,10 @@ echo "=============================================="
 
 MODE="${1:-dev}"
 
+# Configure Rust toolchain and install Trunk
+rustup default stable || true # ignore failure if already configured
+cargo install trunk
+
 install_tools() {
     echo "🔧 Installing required tools..."
     
@@ -42,7 +46,7 @@ start_services() {
     # Start Neo4j
     if ! docker ps | grep -q spotify-neo4j; then
         echo "Starting Neo4j database..."
-        docker compose up -d neo4j
+        docker compose -f docker-compose.yml up -d
         
         # Wait for Neo4j to be ready
         echo "⏳ Waiting for Neo4j to be ready..."

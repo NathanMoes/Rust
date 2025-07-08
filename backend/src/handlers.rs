@@ -403,7 +403,10 @@ pub async fn get_graph_data(
         }
         Err(e) => {
             let duration = start_time.elapsed();
-            error!("Failed to get graph data: {} (took {:?})", e, duration);
+            error!(
+                "Failed to get graph data: query={:?}, limit={}, error={} (took {:?})",
+                query, limit, e, duration
+            );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
