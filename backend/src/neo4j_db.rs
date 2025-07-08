@@ -465,15 +465,15 @@ pub async fn get_graph_data(graph: &Graph, query: Option<&str>, limit: Option<i3
     let mut edges = Vec::new();
     
     // Build query based on search parameter
-    let node_query = if let Some(search_query) = query {
+    let node_query = if let Some(_search_query) = query {
         format!(
             "MATCH (n) WHERE n.name CONTAINS $query OR toLower(n.name) CONTAINS toLower($query) 
-             RETURN n, labels(n) as labels LIMIT {}",
+             RETURN n.id as id, n.name as name, labels(n) as labels, n LIMIT {}",
             limit
         )
     } else {
         format!(
-            "MATCH (n) RETURN n, labels(n) as labels LIMIT {}",
+            "MATCH (n) RETURN n.id as id, n.name as name, labels(n) as labels, n LIMIT {}",
             limit
         )
     };
@@ -491,40 +491,41 @@ pub async fn get_graph_data(graph: &Graph, query: Option<&str>, limit: Option<i3
         let labels: Vec<String> = row.get("labels")?;
         let node_type = labels.first().unwrap_or(&"Unknown".to_string()).to_lowercase();
         
-        let node_id = row.get::<String>("n.id")?;
-        let node_name = row.get::<String>("n.name")?;
+        let node_id = row.get::<String>("id")?;
+        let node_name = row.get::<String>("name")?;
+        let node: neo4rs::Node = row.get("n")?;
         
         node_ids.push(node_id.clone());
         
         let properties = match node_type.as_str() {
             "track" => {
                 let audio_features = Some(AudioFeatures {
-                    danceability: row.get::<f64>("n.danceability").unwrap_or(0.0),
-                    energy: row.get::<f64>("n.energy").unwrap_or(0.0),
-                    valence: row.get::<f64>("n.valence").unwrap_or(0.0),
-                    tempo: row.get::<f64>("n.tempo").unwrap_or(0.0),
-                    acousticness: row.get::<f64>("n.acousticness").unwrap_or(0.0),
-                    instrumentalness: row.get::<f64>("n.instrumentalness").unwrap_or(0.0),
+                    danceability: node.get::<f64>("danceability").unwrap_or(0.0),
+                    energy: node.get::<f64>("energy").unwrap_or(0.0),
+                    valence: node.get::<f64>("valence").unwrap_or(0.0),
+                    tempo: node.get::<f64>("tempo").unwrap_or(0.0),
+                    acousticness: node.get::<f64>("acousticness").unwrap_or(0.0),
+                    instrumentalness: node.get::<f64>("instrumentalness").unwrap_or(0.0),
                 });
                 
                 GraphNodeProperties {
                     name: node_name.clone(),
-                    popularity: row.get::<i64>("n.popularity").ok().map(|p| p as i32),
+                    popularity: node.get::<i64>("popularity").ok().map(|p| p as i32),
                     genres: None,
                     audio_features,
                     image_url: None,
-                    duration_ms: row.get::<i64>("n.duration_ms").ok().map(|d| d as i32),
-                    artist_names: row.get::<Vec<String>>("n.artist_names").ok(),
-                    album_name: row.get::<String>("n.album_name").ok(),
+                    duration_ms: node.get::<i64>("duration_ms").ok().map(|d| d as i32),
+                    artist_names: node.get::<Vec<String>>("artist_names").ok(),
+                    album_name: node.get::<String>("album_name").ok(),
                 }
             },
             "artist" => {
                 GraphNodeProperties {
                     name: node_name.clone(),
-                    popularity: row.get::<i64>("n.popularity").ok().map(|p| p as i32),
-                    genres: row.get::<Vec<String>>("n.genres").ok(),
+                    popularity: node.get::<i64>("popularity").ok().map(|p| p as i32),
+                    genres: node.get::<Vec<String>>("genres").ok(),
                     audio_features: None,
-                    image_url: row.get::<String>("n.image_url").ok(),
+                    image_url: node.get::<String>("image_url").ok(),
                     duration_ms: None,
                     artist_names: None,
                     album_name: None,
@@ -536,7 +537,7 @@ pub async fn get_graph_data(graph: &Graph, query: Option<&str>, limit: Option<i3
                     popularity: None,
                     genres: None,
                     audio_features: None,
-                    image_url: row.get::<String>("n.image_url").ok(),
+                    image_url: node.get::<String>("image_url").ok(),
                     duration_ms: None,
                     artist_names: None,
                     album_name: None,
