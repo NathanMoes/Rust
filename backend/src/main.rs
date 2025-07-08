@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/youtube/playlist/from-recommendations", post(handlers::create_youtube_playlist_from_recommendations))
         .route("/api/recommendations", get(handlers::get_recommendations))
         .route("/api/similar-tracks", get(handlers::get_similar_tracks_with_youtube))
+        .route("/api/graph", get(handlers::get_graph_data))
         .with_state(neo4j_client)
         // Serve static files from frontend/dist
         .nest_service("/", ServeDir::new("frontend/dist"))

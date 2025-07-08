@@ -101,3 +101,47 @@ pub struct ApiError {
     pub error: String,
     pub message: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphNode {
+    pub id: String,
+    pub label: String,
+    pub node_type: String, // "track", "artist", "album"
+    pub properties: GraphNodeProperties,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphNodeProperties {
+    pub name: String,
+    pub popularity: Option<i32>,
+    pub genres: Option<Vec<String>>,
+    pub audio_features: Option<AudioFeatures>,
+    pub image_url: Option<String>,
+    pub duration_ms: Option<i32>,
+    pub artist_names: Option<Vec<String>>,
+    pub album_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioFeatures {
+    pub danceability: f64,
+    pub energy: f64,
+    pub valence: f64,
+    pub tempo: f64,
+    pub acousticness: f64,
+    pub instrumentalness: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphEdge {
+    pub source: String,
+    pub target: String,
+    pub relationship: String, // "PERFORMED", "CONTAINS"
+    pub properties: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphData {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+}

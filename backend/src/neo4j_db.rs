@@ -456,3 +456,134 @@ pub async fn get_track_by_id(graph: &Graph, track_id: &str) -> Result<Option<Tra
         Ok(None)
     }
 }
+
+pub async fn get_graph_data(graph: &Graph, query: Option<&str>, limit: Option<i32>) -> Result<crate::models::GraphData> {
+    use crate::models::{GraphNode, GraphEdge, GraphData, GraphNodeProperties, AudioFeatures};
+    
+    let limit = limit.unwrap_or(50);
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+    
+    // Build query based on search parameter
+    let node_query = if let Some(search_query) = query {
+        format!(
+            "MATCH (n) WHERE n.name CONTAINS $query OR toLower(n.name) CONTAINS toLower($query) 
+             RETURN n, labels(n) as labels LIMIT {}",
+            limit
+        )
+    } else {
+        format!(
+            "MATCH (n) RETURN n, labels(n) as labels LIMIT {}",
+            limit
+        )
+    };
+    
+    // Get nodes
+    let mut cypher_query = Query::new(node_query);
+    if let Some(search_query) = query {
+        cypher_query = cypher_query.param("query", search_query);
+    }
+    
+    let mut result = graph.execute(cypher_query).await?;
+    let mut node_ids = Vec::new();
+    
+    while let Some(row) = result.next().await? {
+        let labels: Vec<String> = row.get("labels")?;
+        let node_type = labels.first().unwrap_or(&"Unknown".to_string()).to_lowercase();
+        
+        let node_id = row.get::<String>("n.id")?;
+        let node_name = row.get::<String>("n.name")?;
+        
+        node_ids.push(node_id.clone());
+        
+        let properties = match node_type.as_str() {
+            "track" => {
+                let audio_features = Some(AudioFeatures {
+                    danceability: row.get::<f64>("n.danceability").unwrap_or(0.0),
+                    energy: row.get::<f64>("n.energy").unwrap_or(0.0),
+                    valence: row.get::<f64>("n.valence").unwrap_or(0.0),
+                    tempo: row.get::<f64>("n.tempo").unwrap_or(0.0),
+                    acousticness: row.get::<f64>("n.acousticness").unwrap_or(0.0),
+                    instrumentalness: row.get::<f64>("n.instrumentalness").unwrap_or(0.0),
+                });
+                
+                GraphNodeProperties {
+                    name: node_name.clone(),
+                    popularity: row.get::<i64>("n.popularity").ok().map(|p| p as i32),
+                    genres: None,
+                    audio_features,
+                    image_url: None,
+                    duration_ms: row.get::<i64>("n.duration_ms").ok().map(|d| d as i32),
+                    artist_names: row.get::<Vec<String>>("n.artist_names").ok(),
+                    album_name: row.get::<String>("n.album_name").ok(),
+                }
+            },
+            "artist" => {
+                GraphNodeProperties {
+                    name: node_name.clone(),
+                    popularity: row.get::<i64>("n.popularity").ok().map(|p| p as i32),
+                    genres: row.get::<Vec<String>>("n.genres").ok(),
+                    audio_features: None,
+                    image_url: row.get::<String>("n.image_url").ok(),
+                    duration_ms: None,
+                    artist_names: None,
+                    album_name: None,
+                }
+            },
+            "album" => {
+                GraphNodeProperties {
+                    name: node_name.clone(),
+                    popularity: None,
+                    genres: None,
+                    audio_features: None,
+                    image_url: row.get::<String>("n.image_url").ok(),
+                    duration_ms: None,
+                    artist_names: None,
+                    album_name: None,
+                }
+            },
+            _ => {
+                GraphNodeProperties {
+                    name: node_name.clone(),
+                    popularity: None,
+                    genres: None,
+                    audio_features: None,
+                    image_url: None,
+                    duration_ms: None,
+                    artist_names: None,
+                    album_name: None,
+                }
+            }
+        };
+        
+        nodes.push(GraphNode {
+            id: node_id,
+            label: node_name,
+            node_type,
+            properties,
+        });
+    }
+    
+    // Get relationships between these nodes
+    if !node_ids.is_empty() {
+        let edge_query = format!(
+            "MATCH (a)-[r]->(b) 
+             WHERE a.id IN $node_ids AND b.id IN $node_ids 
+             RETURN a.id as source, b.id as target, type(r) as relationship"
+        );
+        
+        let edge_cypher = Query::new(edge_query).param("node_ids", node_ids.clone());
+        let mut edge_result = graph.execute(edge_cypher).await?;
+        
+        while let Some(row) = edge_result.next().await? {
+            edges.push(GraphEdge {
+                source: row.get("source")?,
+                target: row.get("target")?,
+                relationship: row.get("relationship")?,
+                properties: None,
+            });
+        }
+    }
+    
+    Ok(GraphData { nodes, edges })
+}

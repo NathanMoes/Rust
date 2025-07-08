@@ -196,4 +196,39 @@ impl ApiService {
             Err(format!("Failed to fetch similar tracks: {}", error_text))
         }
     }
+
+    pub async fn get_graph_data(query: Option<String>, limit: Option<u32>) -> Result<GraphData, String> {
+        let mut url = format!("{}/graph", API_BASE_URL);
+        let mut params = Vec::new();
+        
+        if let Some(q) = query {
+            params.push(format!("query={}", urlencoding::encode(&q)));
+        }
+        
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        
+        if !params.is_empty() {
+            url = format!("{}?{}", url, params.join("&"));
+        }
+
+        let response = Request::get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if response.ok() {
+            response
+                .json::<GraphData>()
+                .await
+                .map_err(|e| format!("Failed to parse response: {}", e))
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            Err(format!("Failed to fetch graph data: {}", error_text))
+        }
+    }
 }
